@@ -1,4 +1,4 @@
-# Danjuan Ableton 扩展制作助手
+# Danjuan Ableton 扩展制作 SKILL
 
 想给你的 Ableton Live 加点私人定制的小工具，但又完全不会敲代码？这套专为大模型（比如 ChatGPT, Claude, 豆包, Kimi 等）准备的系统提示词（Prompt/Skill），就是为你量身定做的。
 
