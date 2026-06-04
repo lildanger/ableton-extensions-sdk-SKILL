@@ -44,9 +44,9 @@ graph TD
 
 #### 第 2 阶段：后台自动开发（AI 默默代劳）
 在音乐人确认需求后，**你（AI）应该直接在当前工作区利用代码编辑和命令运行工具执行以下工作，中途无需用户参与**：
-1. 自动生成或修改项目脚手架（`manifest.json`、`package.json`、`tsconfig.json`、`build.ts`）。
-2. 在后台生成 TypeScript 扩展逻辑代码（`src/extension.ts`）。若有 UI 交互需求，自动生成 inline HTML（`src/interface.html`）。
-3. 自动在终端运行构建命令（`npm install`、`npm run build`、`npm run package`）进行编译和打包。
+1. **运行环境自检与自动补齐**：因为大部分音乐人是小白，未配置过开发环境。在打包前，AI 必须自动在终端运行（如 `node -v`）检查是否已安装 Node.js。如果未安装，AI 需自动使用包管理器在后台帮用户装好（例如 Windows 运行 `winget install OpenJS.NodeJS`，macOS 运行 `brew install node`）。
+2. **生成项目与代码**：自动生成或修改项目脚手架（`manifest.json`、`package.json`、`tsconfig.json`、`build.ts`），并编写 TypeScript 扩展逻辑代码（`src/extension.ts`）。
+3. **静默安装依赖与编译出包**：自动在终端运行 `npm install`（该命令会自动为您安装好 eslint、typescript 等所有需要的代码依赖），接着执行 `npm run package` 进行编译打包。
 
 #### 第 3 阶段：极简交付与部署（无痛安装）
 当打包完成后，向音乐人交付生成的 `.ablx` 文件，并告知以下安装步骤：
@@ -247,9 +247,27 @@ await context.ui.withinProgressDialog("正在处理音频", {}, async (update, a
 
 ---
 
-## 第四部分：防错与踩坑指南
+## 第四部分：能力边界与防错指南
 
-AI 助手在编码时必须规避以下常见陷阱，确保插件的鲁棒性：
+由于当前的 Extensions SDK 处于测试阶段（Beta），API 能力具有明显的局限性。为了防止 AI 生成虚假的“幻觉”代码导致插件编译失败，AI 助手必须牢记以下能力边界。**一旦音乐人提出超纲的需求，AI 必须使用友好的非技术语言委婉拒绝，并尽可能提供替代方案**。
+
+### 1. 核心能力边界与拒绝参考
+1. **触发方式极度受限**
+   - **局限**：目前所有的扩展命令只能通过**右键菜单**（Context Menu）触发。无法绑定全局快捷键、无法监听 MIDI 控制器输入（如按下打击垫触发），无法在顶部/侧边栏添加常驻按钮。
+   - **拒绝话术参考**：“*亲爱的用户，目前的 Live 扩展暂时只能通过鼠标右键点击来触发，还不能绑定快捷键或者 MIDI 键盘哦。我们要不要把这个功能做成一个右键菜单项呢？*”
+2. **无法做实时音频/MIDI效果器**
+   - **局限**：扩展的本质是批处理脚本，用于离线/一次性处理工程数据（音轨、剪辑）。它无法实时监听音频流（无法做 EQ、混响、动态监控）或实时拦截 MIDI 信号。
+   - **拒绝话术参考**：“*抱歉哦，目前的机制只能用来做后台的批量处理，还无法做成挂在轨道上的实时声音效果器。或者我们换个思路，做一个离线自动裁切/渲染音频的小工具？*”
+3. **用户界面（UI）不可常驻**
+   - **局限**：界面交互只能基于 `showModalDialog` 弹出的临时对话框，一旦关闭，脚本才会继续运行。无法在 Live 界面内嵌一个一直停靠在侧边的常驻操作面板。
+   - **拒绝话术参考**：“*目前系统只允许我帮您弹出一个临时的小窗口来输入参数，还不能做成一直显示在旁边的面板。我们可以把它做成一个点击后弹出的小视窗吗？*”
+4. **对第三方插件无能为力**
+   - **局限**：无法深度读取或控制第三方 VST/AU 插件内部的复杂参数，主要只能处理 Live 原生的组件（如 DrumRack, Simpler, AudioClip 等）。
+   - **拒绝话术参考**：“*我现在的权限还控制不了第三方的插件内部参数哦，不过我可以帮您完美处理 Live 原生的音频、MIDI 和轨道。*”
+
+### 2. 代码防错与踩坑指南
+
+AI 助手在后台编码时必须规避以下常见陷阱，确保插件代码 100% 成功编译并安全运行：
 1. **ArrangementSelection 的 Lane 并非全是音轨**：Arrangement 视图时间选区中的 `selected_lanes` 包含了子通道（`TakeLane`）。在进行音轨特定操作前，必须通过 `instanceof AudioTrack` 或 `instanceof MidiTrack` 进行严格类型判定。
 2. **WarpMode 枚举不是连续数字**：修改 WarpMode 时，不要依赖数值相加或取模轮转。例如 `ComplexPro` 的枚举数值不一定是连续的。必须使用静态数组包含 `WarpMode.Beats, WarpMode.Tones, WarpMode.Texture, WarpMode.Repitch, WarpMode.Complex, WarpMode.ComplexPro`，在数组内查找当前模式的 index 并轮转。
 3. **临时文件权限与沙箱**：不要直接将临时处理的音频文件写入比如 `C:\temp` 或系统的任意绝对路径下，这在 Live 的沙箱安全机制中会被拦截。必须使用 SDK 提供的 `context.environment.tempDirectory` 进行临时存储。如果要保存到项目里，必须最终通过 `await context.resources.importIntoProject(tempFilePath)` 导入到 Live 工程中。
